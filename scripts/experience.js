@@ -3,11 +3,19 @@ import * as THREE from 'three';
 import {
     OrbitControls
 } from 'three/examples/jsm/controls/OrbitControls';
+import {
+    GLTFLoader
+} from 'three/examples/jsm/loaders/GLTFLoader';
 
+// import {
+//     OrbitControls,GLTFL
+// } from 'three/examples/jsm';
 import Stats from 'three/examples/jsm/libs/stats.module';
 
 
-console.log({ THREE })
+console.log({ GLTFLoader })
+
+// console.log(THREE)
 
 export default class Experience {
     constructor() {
@@ -93,7 +101,7 @@ export default class Experience {
     }
     setupCamera() {
         const { scene, width, height } = this.getState();
-        const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 100)
+        const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 1000)
         camera.position.z = 3
         scene.add(camera)
         this.setState({ camera })
