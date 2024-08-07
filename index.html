@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Experience</title>
+    <link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles/index.css" />
+</head>
+
+
+
+
+  <script type="importmap">
+    {
+          "imports": {
+              "three": "https://cdn.skypack.dev/three@0.149.0/build/three.module",
+        "three/": "https://cdn.skypack.dev/three@0.149.0/",      
+        "dat.gui": "https://cdn.skypack.dev/dat.gui"
+          }
+      }
+  </script>
+
+<body translate="no">
+
+    <div class="page-container">
+        <div id="graph-container"></div>
+    </div>
+
+    <script src="libs/d3.v7.min.js"></script>
+    <script src="scripts/experience.js" type="module"></script>
+
+    <script type="module">
+        import Experience from './scripts/experience.js'
+        let experience;
+        d3.json('data/data.json')
+            .then(data => {
+                experience = new Experience()
+                    .container('#graph-container')
+                    .data(data)
+                    .render()
+            })
+    </script>
+
+</body>
+
+</html>

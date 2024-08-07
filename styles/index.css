@@ -1,0 +1,18 @@
+body {
+  background-color: #FAFAFA;
+}
+
+svg {
+  background-color: #FAFAFA;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  overflow: hidden;
+}
+
