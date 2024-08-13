@@ -39,6 +39,8 @@ export default class Experience {
             renderer: null,
             container: "body",
             defaultFont: "Helvetica",
+            vertexShader: null,
+            fragmentShader: null,
             data: null,
         };
 
@@ -86,12 +88,29 @@ export default class Experience {
 
     }
     setupGeometryMaterialMesh() {
-        const { scene } = this.getState();
-        const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshBasicMaterial({ color: 0x8b00a3 });
-        const mesh = new THREE.Mesh(geometry, material);
-        scene.add(mesh)
-        this.setState({ geometry, material, mesh })
+        const { scene, vertexShader, fragmentShader } = this.getState();
+        console.log({vertexShader,fragmentShader})
+        const material = new THREE.ShaderMaterial({
+            // extensions: {
+            //     derivatives: "#extension GL_OES_standard_derivatives : enable"
+            // },
+            side: THREE.DoubleSide,
+            uniforms: {
+                uTime: { value: 0 },
+                uResolution: { value: new THREE.Vector4() }
+            },
+            vertexShader,
+            fragmentShader
+        })
+
+        new GLTFLoader().load('./data/cube.glb', gltf => {
+            const model = gltf.scene.children[0];
+            console.log({material})
+            model.material = material;
+            scene.add(model);
+        })
+
+        this.setState({  material })
     }
     setupControls() {
         const { scene, width, height, canvas, camera } = this.getState();
@@ -119,9 +138,7 @@ export default class Experience {
     }
 
     tick() {
-        const { scene, renderer, camera, controls, mesh } = this.getState();
-        mesh.rotation.y += 0.01;
-        mesh.rotation.x += 0.01;
+        const { scene, renderer, camera, controls } = this.getState();
         controls.update()
         renderer.render(scene, camera)
         window.requestAnimationFrame(this.tick.bind(this))

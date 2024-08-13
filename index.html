@@ -13,7 +13,7 @@
 
 
 
-  <script type="importmap">
+<script type="importmap">
     {
           "imports": {
             "three": "https://cdn.skypack.dev/three@0.149.0/build/three.module",
@@ -35,13 +35,21 @@
     <script type="module">
         import Experience from './scripts/experience.js'
         let experience;
-        d3.json('data/data.json')
-            .then(data => {
-                experience = new Experience()
-                    .container('#graph-container')
-                    .data(data)
-                    .render()
-            })
+
+
+        Promise.all([
+            d3.text('./scripts/shaders/vertex.glsl'),
+            d3.text('./scripts/shaders/fragment.glsl'),
+            d3.json('./data/data.json')
+        ]).then(([vertexShader, fragmentShader, data]) => {
+            experience = new Experience()
+                .container('#graph-container')
+                .data(data)
+                .vertexShader(vertexShader)
+                .fragmentShader(fragmentShader)
+                .render()
+        })
+
     </script>
 
 </body>
