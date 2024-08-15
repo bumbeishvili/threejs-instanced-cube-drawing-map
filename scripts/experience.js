@@ -42,6 +42,10 @@ export default class Experience {
             vertexShader: null,
             fragmentShader: null,
             data: null,
+            barModel: null,
+            ambientLight: null,
+            spotLight: null,
+            gridSize: 50,
         };
 
         // Defining accessors
@@ -70,10 +74,14 @@ export default class Experience {
         this.drawCanvasAndWrapper();
         this.setupScene()
         this.setupTextures();
+        this.addLights();
         this.setupGeometryMaterialMesh();
         this.setupCamera()
         this.setupControls()
         this.setupRenderer();
+
+
+
         this.tick();
 
         return this;
@@ -84,13 +92,36 @@ export default class Experience {
         this.setState({ scene })
 
     }
-    setupTextures() {
+    addLights() {
+        const { scene } = this.getState();
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight)
 
+        const spotLight = new THREE.SpotLight(0xff3939, 1600);
+        spotLight.position.set(-80, 200, -80);
+        let target = new THREE.Object3D();
+        target.position.set(0, -80, 200)
+        spotLight.target = target;
+        spotLight.intensity = 300;
+        spotLight.angle = 2;
+        spotLight.penumbra = 1.5;
+        spotLight.decay = 0.7;
+        spotLight.distance = 3000;
+
+        scene.add(spotLight)
+        this.setState({ ambientLight, spotLight })
+    }
+    setupTextures() {
+        const texture = new THREE.TextureLoader().load('./assets/texture-ambient-occlusion.png');
+        texture.flipY = false;
+        this.setState({ texture })
     }
     setupGeometryMaterialMesh() {
-        const { scene, vertexShader, fragmentShader } = this.getState();
-        console.log({vertexShader,fragmentShader})
-        const material = new THREE.ShaderMaterial({
+        const { scene, vertexShader, fragmentShader, texture } = this.getState();
+        console.log({ vertexShader, fragmentShader })
+
+
+        let material = new THREE.ShaderMaterial({
             // extensions: {
             //     derivatives: "#extension GL_OES_standard_derivatives : enable"
             // },
@@ -103,41 +134,108 @@ export default class Experience {
             fragmentShader
         })
 
-        new GLTFLoader().load('./data/cube.glb', gltf => {
-            const model = gltf.scene.children[0];
-            console.log({material})
-            model.material = material;
-            scene.add(model);
+
+
+        material = new THREE.MeshPhysicalMaterial({
+            //color: 0x0000D3,
+            map: texture,
+            roughness: 0.5,
+            aoMap: texture,
+            aoMapIntensity: 0.15,
         })
 
-        this.setState({  material })
+
+        new GLTFLoader().load('./assets/cube.glb', gltf => {
+            const model = gltf.scene.children[0];
+            model.material = material;
+
+            let geometry = model.geometry;
+            geometry.scale(40, 40, 40)
+            scene.add(model)
+
+            this.setState({ barModel: model, geometry });
+            this.addInstancedMesh();
+        })
+
+        this.setState({ material })
     }
-    setupControls() {
-        const { scene, width, height, canvas, camera } = this.getState();
-        const controls = new OrbitControls(camera, canvas)
-        controls.enableDamping = true
-        this.setState({ controls });
+
+    addInstancedMesh() {
+        const { gridSize, scene, camera, barModel, geometry, renderer, material } = this.getState();
+        // scene.add(barModel);
+        console.log({ geometry, material })
+        let instanceCount = gridSize * gridSize;
+        let instancedMesh = new THREE.InstancedMesh(
+            geometry,
+            material,
+            instanceCount
+        )
+        let dummy = new THREE.Object3D();
+        let w = 60;
+        for (let i = 0; i < gridSize; i++) {
+            for (let j = 0; j < gridSize; j++) {
+                dummy.position.set(
+                    w * (i - gridSize / 2),
+                    0,
+                    w * (j - gridSize / 2)
+                )
+                dummy.updateMatrix();
+                instancedMesh.setMatrixAt(i * gridSize + j, dummy.matrix)
+            }
+        }
+        scene.add(instancedMesh)
+        // console.log({ geometry, material, instancedMesh, w, instanceCount })
+        // renderer.render(scene, camera)
+
     }
+
     setupCamera() {
         const { scene, width, height } = this.getState();
-        const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 1000)
-        camera.position.z = 3
+        let frustumSize = height;
+        let aspect = width / height;
+        const perspectiveCamera = new THREE.PerspectiveCamera(70, aspect, 0.1, 1000)
+        perspectiveCamera.position.z = 3
+
+        const orthographicCamera = new THREE.OrthographicCamera(
+            frustumSize * aspect / -2,
+            frustumSize * aspect / 2,
+            frustumSize / 2,
+            frustumSize / -2,
+            -2000,
+            2000
+        )
+        orthographicCamera.position.z = 3;
+        let camera = perspectiveCamera;
+        camera = orthographicCamera;
         scene.add(camera)
         this.setState({ camera })
 
+    }
+
+    setupControls() {
+        const { scene, width, height, canvas, camera } = this.getState();
+        const controls = new OrbitControls(camera, canvas)
+        // controls.enableDamping = true
+        controls.enableRotate = true;
+        controls.minPolarAngle = 0; // radians
+        controls.maxPolarAngle = Math.PI; // radians
+        this.setState({ controls });
     }
     setupRenderer() {
         const { width, height, canvas } = this.getState();
         const renderer = new THREE.WebGLRenderer({
             canvas: canvas
         })
-        renderer.setClearColor('#001b47');
+        renderer.setClearColor('#06082B');
         renderer.setSize(width, height)
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+        renderer.physicallyCorrectLights = true;
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.setState({ renderer })
     }
 
     tick() {
+        console.log('ticking')
         const { scene, renderer, camera, controls } = this.getState();
         controls.update()
         renderer.render(scene, camera)
