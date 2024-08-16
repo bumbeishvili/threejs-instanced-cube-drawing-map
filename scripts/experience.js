@@ -45,7 +45,9 @@ export default class Experience {
             barModel: null,
             ambientLight: null,
             spotLight: null,
-            gridSize: 50,
+            gridSize: 60,
+            ambientOcclusionTexture: null,
+
         };
 
         // Defining accessors
@@ -94,18 +96,17 @@ export default class Experience {
     }
     addLights() {
         const { scene } = this.getState();
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.9);
         scene.add(ambientLight)
 
-        const spotLight = new THREE.SpotLight(0xff3939, 1600);
+        const spotLight = new THREE.SpotLight(0xffaaaa, 330);
         spotLight.position.set(-80, 200, -80);
         let target = new THREE.Object3D();
         target.position.set(0, -80, 200)
         spotLight.target = target;
-        spotLight.intensity = 300;
-        spotLight.angle = 2;
+        spotLight.angle = 4;
         spotLight.penumbra = 1.5;
-        spotLight.decay = 0.7;
+        spotLight.decay = 0.75;
         spotLight.distance = 3000;
 
         scene.add(spotLight)
@@ -114,35 +115,87 @@ export default class Experience {
     setupTextures() {
         const texture = new THREE.TextureLoader().load('./assets/texture-ambient-occlusion.png');
         texture.flipY = false;
-        this.setState({ texture })
+        this.setState({ texture, ambientOcclusionTexture: texture })
     }
     setupGeometryMaterialMesh() {
-        const { scene, vertexShader, fragmentShader, texture } = this.getState();
+        const { scene, vertexShader, fragmentShader, texture, ambientOcclusionTexture } = this.getState();
         console.log({ vertexShader, fragmentShader })
 
 
-        let material = new THREE.ShaderMaterial({
-            // extensions: {
-            //     derivatives: "#extension GL_OES_standard_derivatives : enable"
-            // },
-            side: THREE.DoubleSide,
-            uniforms: {
-                uTime: { value: 0 },
-                uResolution: { value: new THREE.Vector4() }
-            },
-            vertexShader,
-            fragmentShader
-        })
-
-
-
-        material = new THREE.MeshPhysicalMaterial({
+        let material = new THREE.MeshPhysicalMaterial({
             //color: 0x0000D3,
-            map: texture,
+            map: ambientOcclusionTexture,
             roughness: 0.5,
-            aoMap: texture,
+            aoMap: ambientOcclusionTexture,
             aoMapIntensity: 0.15,
         })
+
+
+        let uniforms = {
+            uTime: { value: 0 },
+            uTextureMask: { value: new THREE.TextureLoader().load('./assets/texture-mask-graph.png') },
+            uAOMap: ambientOcclusionTexture,
+            uLightColor: { value: new THREE.Color('#fff9f9') },
+            uColorOne: { value: new THREE.Color('#06082d') },
+            uColorTwo: { value: new THREE.Color('#020284') },
+            uColorThree: { value: new THREE.Color('#0000ff') },
+            uColorFour: { value: new THREE.Color('#71c7f5') },
+        }
+
+        material.onBeforeCompile = (shader) => {
+            Object.assign(shader.uniforms, uniforms);
+            shader.vertexShader = shader.vertexShader.replace(
+                `#include <common>`,
+                `#include <common>
+                uniform sampler2D uTextureMask;
+                attribute vec2 aInstanceUV;
+                uniform vec3 uLightColor;
+                uniform vec3 uColorOne;
+                uniform vec3 uColorTwo;
+                uniform vec3 uColorThree;
+                uniform vec3 uColorFour;
+                varying float vHeight;
+                varying float vHeightUV;
+                `
+            )
+
+            shader.vertexShader = shader.vertexShader.replace(
+                `#include <begin_vertex>`,
+                `#include <begin_vertex>
+                vHeightUV = clamp(position.y*2.,0.,1.0);
+                vec4 transition = texture2D(uTextureMask,aInstanceUV);
+                transformed *= transition.r;
+                //vHeight = transformed.b;
+                `
+            )
+
+
+            shader.fragmentShader = shader.fragmentShader.replace(
+                `#include <common>`,
+                `#include <common>
+                uniform vec3 uLightColor;
+                uniform vec3 uColorOne;
+                uniform vec3 uColorTwo;
+                uniform vec3 uColorThree;
+                uniform vec3 uColorFour;
+                varying float vHeight;
+                varying float vHeightUV;
+                `
+            )
+
+
+            shader.fragmentShader = shader.fragmentShader.replace(
+                `#include <color_fragment>`,
+                `#include <color_fragment>
+
+                 vec3 highlight = mix(uColorThree,uColorFour,vHeightUV);
+                 diffuseColor.rgb = mix(uColorTwo, uColorThree, vHeightUV);
+                `
+            )
+            console.log('shader replaced')
+
+
+        }
 
 
         new GLTFLoader().load('./assets/cube.glb', gltf => {
@@ -161,7 +214,7 @@ export default class Experience {
     }
 
     addInstancedMesh() {
-        const { gridSize, scene, camera, barModel, geometry, renderer, material } = this.getState();
+        const { gridSize, scene, camera, barModel, ambientOcclusionTexture, geometry, renderer, material } = this.getState();
         // scene.add(barModel);
         console.log({ geometry, material })
         let instanceCount = gridSize * gridSize;
@@ -170,10 +223,13 @@ export default class Experience {
             material,
             instanceCount
         )
+        console.log({ material })
         let dummy = new THREE.Object3D();
         let w = 60;
+        let instanceUV = new Float32Array(instanceCount * 2)
         for (let i = 0; i < gridSize; i++) {
             for (let j = 0; j < gridSize; j++) {
+                instanceUV.set([i / gridSize, j / gridSize], (i * gridSize + j) * 2);
                 dummy.position.set(
                     w * (i - gridSize / 2),
                     0,
@@ -183,9 +239,9 @@ export default class Experience {
                 instancedMesh.setMatrixAt(i * gridSize + j, dummy.matrix)
             }
         }
+        console.log({ instanceUV })
+        geometry.setAttribute('aInstanceUV', new THREE.InstancedBufferAttribute(instanceUV, 2));
         scene.add(instancedMesh)
-        // console.log({ geometry, material, instancedMesh, w, instanceCount })
-        // renderer.render(scene, camera)
 
     }
 
