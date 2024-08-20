@@ -45,7 +45,7 @@ export default class Experience {
             barModel: null,
             ambientLight: null,
             spotLight: null,
-            gridSize: 60,
+            gridSize: 120,
             ambientOcclusionTexture: null,
 
         };
