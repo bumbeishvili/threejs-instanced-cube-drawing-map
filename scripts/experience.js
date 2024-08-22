@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import * as dat from 'dat.gui';
 
 import {
     OrbitControls
@@ -47,7 +48,16 @@ export default class Experience {
             spotLight: null,
             gridSize: 120,
             ambientOcclusionTexture: null,
-
+            helperFrameBufferObject: null,
+            helperFrameBufferObjectScene: null,
+            helperFrameBufferObjectCamera: null,
+            helperFrameBufferObjectMaterial: null,
+            fboFragmentShader: null,
+            fboVertexShader: null,
+            state1Texture: null,
+            state2Texture: null,
+            uniforms: null,
+            progress: 0,
         };
 
         // Defining accessors
@@ -78,9 +88,12 @@ export default class Experience {
         this.setupTextures();
         this.addLights();
         this.setupGeometryMaterialMesh();
+        this.setupHelperFrameBufferObjects();
         this.setupCamera()
         this.setupControls()
+        this.setupGUI();
         this.setupRenderer();
+
 
 
 
@@ -113,9 +126,39 @@ export default class Experience {
         this.setState({ ambientLight, spotLight })
     }
     setupTextures() {
-        const texture = new THREE.TextureLoader().load('./assets/texture-ambient-occlusion.png');
+        const textureLoader = new THREE.TextureLoader()
+        const texture = textureLoader.load('./assets/texture-ambient-occlusion.png');
         texture.flipY = false;
-        this.setState({ texture, ambientOcclusionTexture: texture })
+
+        const state1Texture = textureLoader.load('./assets/state1.png');
+        //const state1Texture = textureLoader.load('./assets/state2.jpg');
+        const state2Texture = textureLoader.load('./assets/state2.jpg');
+        this.setState({ texture, state1Texture, state2Texture, ambientOcclusionTexture: texture })
+    }
+    setupHelperFrameBufferObjects() {
+        const { width, progress, state1Texture, state2Texture, height, scene, fboFragmentShader, fboVertexShader } = this.getState();
+        const helperFrameBufferObject = new THREE.WebGLRenderTarget(width, height);
+        const helperFrameBufferObjectCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1);
+        const helperFrameBufferObjectScene = new THREE.Scene();
+        const helperFrameBufferObjectMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                uTime: { value: 0 },
+                uProgress: { value: progress },
+                state1Texture: { value: state1Texture },
+                state2Texture: { value: state2Texture }
+            },
+            vertexShader: fboVertexShader,
+            fragmentShader: fboFragmentShader
+        })
+        const helperFrameBufferObjectGeometry = new THREE.PlaneGeometry(2, 2);
+        const helperFrameBufferObjectMesh = new THREE.Mesh(helperFrameBufferObjectGeometry, helperFrameBufferObjectMaterial)
+        helperFrameBufferObjectScene.add(helperFrameBufferObjectMesh)
+        this.setState({
+            helperFrameBufferObject,
+            helperFrameBufferObjectScene,
+            helperFrameBufferObjectCamera,
+            helperFrameBufferObjectMaterial
+        })
     }
     setupGeometryMaterialMesh() {
         const { scene, vertexShader, fragmentShader, texture, ambientOcclusionTexture } = this.getState();
@@ -133,7 +176,7 @@ export default class Experience {
 
         let uniforms = {
             uTime: { value: 0 },
-            uTextureMask: { value: new THREE.TextureLoader().load('./assets/texture-mask-graph.png') },
+            uTextureMask: { value: new THREE.TextureLoader().load('./assets/state1.png') },
             uAOMap: ambientOcclusionTexture,
             uLightColor: { value: new THREE.Color('#fff9f9') },
             uColorOne: { value: new THREE.Color('#06082d') },
@@ -165,7 +208,8 @@ export default class Experience {
                 vHeightUV = clamp(position.y*2.,0.,1.0);
                 vec4 transition = texture2D(uTextureMask,aInstanceUV);
                 transformed *= transition.r;
-                //vHeight = transformed.b;
+                transformed.y += transition.g*30.;
+                vHeight = transformed.y;
                 `
             )
 
@@ -180,6 +224,7 @@ export default class Experience {
                 uniform vec3 uColorFour;
                 varying float vHeight;
                 varying float vHeightUV;
+                uniform sampler2D uTextureMask;
                 `
             )
 
@@ -190,6 +235,7 @@ export default class Experience {
 
                  vec3 highlight = mix(uColorThree,uColorFour,vHeightUV);
                  diffuseColor.rgb = mix(uColorTwo, uColorThree, vHeightUV);
+                 diffuseColor.rgb = mix(diffuseColor.rgb, highlight, clamp(vHeight/10. -3., 0., 1.));
                 `
             )
             console.log('shader replaced')
@@ -210,7 +256,7 @@ export default class Experience {
             this.addInstancedMesh();
         })
 
-        this.setState({ material })
+        this.setState({ material, uniforms })
     }
 
     addInstancedMesh() {
@@ -277,6 +323,14 @@ export default class Experience {
         controls.maxPolarAngle = Math.PI; // radians
         this.setState({ controls });
     }
+    setupGUI() {
+        const state = this.getState()
+        const gui = new dat.GUI();
+
+        gui.add(state, 'progress', 0, 1, 0.01).onChange(val => {
+            state.helperFrameBufferObjectMaterial.uniforms.uProgress.value = val;
+        })
+    }
     setupRenderer() {
         const { width, height, canvas } = this.getState();
         const renderer = new THREE.WebGLRenderer({
@@ -286,16 +340,23 @@ export default class Experience {
         renderer.setSize(width, height)
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
         renderer.physicallyCorrectLights = true;
+
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.setState({ renderer })
     }
 
     tick() {
-        console.log('ticking')
-        const { scene, renderer, camera, controls } = this.getState();
+        const { scene, material, uniforms, helperFrameBufferObject, helperFrameBufferObjectMaterial, renderer, camera, controls, helperFrameBufferObjectScene, helperFrameBufferObjectCamera } = this.getState();
         controls.update()
+
+        renderer.setRenderTarget(helperFrameBufferObject);
+        renderer.render(helperFrameBufferObjectScene, helperFrameBufferObjectCamera);
+        renderer.setRenderTarget(null)
+
+        uniforms.uTextureMask.value = helperFrameBufferObject.texture;
         renderer.render(scene, camera)
         window.requestAnimationFrame(this.tick.bind(this))
+
     }
 
 

@@ -38,19 +38,19 @@
 
 
         Promise.all([
-            d3.text('./scripts/shaders/vertex.glsl'),
-            d3.text('./scripts/shaders/fragment.glsl'),
+            d3.text('./scripts/shaders/fbo-fragment.glsl'),
+            d3.text('./scripts/shaders/fbo-vertex.glsl'),
             d3.json('./data/data.json')
-        ]).then(([vertexShader, fragmentShader, data]) => {
+        ]).then(([ fboFragmentShader, fboVertexShader, data]) => {
             experience = new Experience()
                 .container('#graph-container')
                 .data(data)
-                .vertexShader(vertexShader)
-                .fragmentShader(fragmentShader)
+                .fboFragmentShader(fboFragmentShader)
+                .fboVertexShader(fboVertexShader)
                 .render()
         })
 
-        
+
 
     </script>
 
