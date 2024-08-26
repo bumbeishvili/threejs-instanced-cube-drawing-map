@@ -46,7 +46,7 @@ export default class Experience {
             barModel: null,
             ambientLight: null,
             spotLight: null,
-            gridSize: 120,
+            gridSize: 60,
             ambientOcclusionTexture: null,
             helperFrameBufferObject: null,
             helperFrameBufferObjectScene: null,
@@ -58,6 +58,8 @@ export default class Experience {
             state2Texture: null,
             uniforms: null,
             progress: 0,
+            debugMesh: null,
+            instancedMesh:null,
         };
 
         // Defining accessors
@@ -153,7 +155,19 @@ export default class Experience {
         const helperFrameBufferObjectGeometry = new THREE.PlaneGeometry(2, 2);
         const helperFrameBufferObjectMesh = new THREE.Mesh(helperFrameBufferObjectGeometry, helperFrameBufferObjectMaterial)
         helperFrameBufferObjectScene.add(helperFrameBufferObjectMesh)
+
+        // Debug
+        const debugMeshGeometry = new THREE.PlaneGeometry(100, 100)
+        //debugMeshGeometry.position.z = 1;
+
+        const debugMesh = new THREE.Mesh(debugMeshGeometry, new THREE.MeshBasicMaterial({ map: helperFrameBufferObject.texture }))
+        console.log({ debugMeshGeometry, debugMesh })
+        debugMesh.position.y = 150;
+       // scene.add(debugMesh)
+
+
         this.setState({
+            debugMesh,
             helperFrameBufferObject,
             helperFrameBufferObjectScene,
             helperFrameBufferObjectCamera,
@@ -161,8 +175,8 @@ export default class Experience {
         })
     }
     setupGeometryMaterialMesh() {
-        const { scene, vertexShader, fragmentShader, texture, ambientOcclusionTexture } = this.getState();
-        console.log({ vertexShader, fragmentShader })
+        const { scene, vertexShader, fragmentShader, texture, ambientOcclusionTexture, debugMesh } = this.getState();
+
 
 
         let material = new THREE.MeshPhysicalMaterial({
@@ -207,8 +221,8 @@ export default class Experience {
                 `#include <begin_vertex>
                 vHeightUV = clamp(position.y*2.,0.,1.0);
                 vec4 transition = texture2D(uTextureMask,aInstanceUV);
-                transformed *= transition.r;
-                transformed.y += transition.g*30.;
+                transformed *= transition.g;
+                transformed.y += transition.r*100.;
                 vHeight = transformed.y;
                 `
             )
@@ -288,6 +302,7 @@ export default class Experience {
         console.log({ instanceUV })
         geometry.setAttribute('aInstanceUV', new THREE.InstancedBufferAttribute(instanceUV, 2));
         scene.add(instancedMesh)
+        this.setState({instancedMesh})
 
     }
 
@@ -307,6 +322,10 @@ export default class Experience {
             2000
         )
         orthographicCamera.position.z = 3;
+        orthographicCamera.position.y = 2;
+        orthographicCamera.position.x = 3;
+        orthographicCamera.updateProjectionMatrix();
+
         let camera = perspectiveCamera;
         camera = orthographicCamera;
         scene.add(camera)
@@ -325,11 +344,13 @@ export default class Experience {
     }
     setupGUI() {
         const state = this.getState()
-        const gui = new dat.GUI();
+        //const gui = new dat.GUI();
 
-        gui.add(state, 'progress', 0, 1, 0.01).onChange(val => {
-            state.helperFrameBufferObjectMaterial.uniforms.uProgress.value = val;
-        })
+        // gui.add(state, 'progress', 0, 1, 0.01).onChange(val => {
+        //     state.helperFrameBufferObjectMaterial.uniforms.uProgress.value = val;
+        // })
+
+
     }
     setupRenderer() {
         const { width, height, canvas } = this.getState();
@@ -346,9 +367,17 @@ export default class Experience {
     }
 
     tick() {
-        const { scene, material, uniforms, helperFrameBufferObject, helperFrameBufferObjectMaterial, renderer, camera, controls, helperFrameBufferObjectScene, helperFrameBufferObjectCamera } = this.getState();
+        const { scene, material,instancedMesh,  uniforms, helperFrameBufferObject, helperFrameBufferObjectMaterial, renderer, camera, controls, helperFrameBufferObjectScene, helperFrameBufferObjectCamera } = this.getState();
         controls.update()
 
+        helperFrameBufferObjectMaterial.uniforms.uProgress.value = (helperFrameBufferObjectMaterial.uniforms.uProgress.value + 0.0009) % 1;
+        camera.zoom = (1-helperFrameBufferObjectMaterial.uniforms.uProgress.value);
+        camera.updateProjectionMatrix();
+        camera.rotation.x +=0.1;
+        if(instancedMesh){
+            instancedMesh.rotation.y+=0.001;
+        }
+      
         renderer.setRenderTarget(helperFrameBufferObject);
         renderer.render(helperFrameBufferObjectScene, helperFrameBufferObjectCamera);
         renderer.setRenderTarget(null)
